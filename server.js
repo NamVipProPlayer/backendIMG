@@ -29,6 +29,6 @@ async function connectDB() {
 connectDB();
 
 // Start server
-app.listen(8080, () => {
+app.listen(process.env.PORT, () => {
   console.log("Server is running on port 8080");
 });

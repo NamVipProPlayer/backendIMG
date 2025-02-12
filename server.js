@@ -4,12 +4,23 @@ require("dotenv/config");
 const cors = require("cors");
 
 const app = express();
-const corsOptions = {
-  origin: "http://localhost:5173",
-  credentials: true, //access-control-allow-credentials:true
-  optionSuccessStatus: 200,
+const corsOptionsDelegate = function (req, callback) {
+  const allowedOrigins = [
+    "http://localhost:5173",
+    "https://e-commerce-project-reactjs.vercel.app",
+  ];
+  let corsOptions;
+
+  if (allowedOrigins.includes(req.header("Origin"))) {
+    corsOptions = { origin: true, credentials: true }; // Allow the request
+  } else {
+    corsOptions = { origin: false }; // Block the request
+  }
+  callback(null, corsOptions);
 };
-app.use(cors(corsOptions));
+
+app.use(cors(corsOptionsDelegate));
+
 // Middleware for JSON parsing
 app.use(express.json());
 

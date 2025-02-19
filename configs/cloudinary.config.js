@@ -1,6 +1,6 @@
+require("dotenv").config();
+const crypto = require("crypto");
 const cloudinary = require("cloudinary").v2;
-const { CloudinaryStorage } = require("multer-storage-cloudinary");
-const multer = require("multer");
 
 cloudinary.config({
   cloud_name: process.env.CLOUDINARY_NAME,
@@ -8,15 +8,13 @@ cloudinary.config({
   api_secret: process.env.CLOUDINARY_API_SECRET,
 });
 
-const storage = new CloudinaryStorage({
-  cloudinary,
-  allowedFormats: ["jpg", "png", "webp"],
-  params: {
-    folder: "productIMG",
-    public_id: (req, file) => file.originalname.split(".")[0],
-  },
+// Generate signature for Cloudinary uploads
+app.get("/api/cloudinary-signature", (req, res) => {
+  const timestamp = Math.round(new Date().getTime() / 1000);
+  const signature = crypto
+    .createHash("sha256")
+    .update(`timestamp=${timestamp}${process.env.CLOUDINARY_API_SECRET}`)
+    .digest("hex");
+
+  res.json({ timestamp, signature });
 });
-
-const uploadCloud = multer({ storage });
-
-module.exports = uploadCloud;

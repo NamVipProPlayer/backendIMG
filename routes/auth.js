@@ -12,38 +12,43 @@ const router = express.Router();
 
 // Register User
 router.post("/register", async (req, res) => {
-  const { name, email, password, roleId, phone } = req.body;
-
-  if (!name || !email || !password || !roleId) {
-    return res
-      .status(400)
-      .json({ message: "Please fill all required fields." });
-  }
-
   try {
+    const { name, email, password, phone } = req.body;
+
+    // Check required fields
+    if (!name || !email || !password || !phone) {
+      return res
+        .status(400)
+        .json({ message: "Please fill all required fields." });
+    }
+
+    // Check if email is already in use
     let user = await Authenticate.findOne({ email });
     if (user) {
       return res.status(400).json({ message: "Email already registered." });
     }
 
-    // Hash password
-    const salt = await bcrypt.genSalt(10);
-    const hashedPassword = await bcrypt.hash(password, salt);
+    // Hash password before saving
+    const hashedPassword = await bcrypt.hash(password, 10);
 
+    // Default roleId = 1 (regular user)
     user = new Authenticate({
       name,
       email,
       password: hashedPassword,
-      roleId,
+      roleId: 1, // Fixed to user role
       phone,
     });
-    await user.save();
 
+    await user.save();
     res.status(201).json({ message: "User registered successfully!" });
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    console.error("Registration Error:", error);
+    res.status(500).json({ message: "Server error", error: error.message });
   }
 });
+
+
 
 // Login User
 router.post("/login", async (req, res) => {
@@ -107,5 +112,41 @@ router.get("/users", authMiddleware, adminMiddleware, async (req, res) => {
 router.get("/admin", authMiddleware, adminMiddleware, (req, res) => {
   res.status(200).json({ message: "Welcome Admin!" });
 });
+
+// Admin create user
+router.post(
+  "/admin/create-user",
+  authMiddleware,
+  adminMiddleware,
+  async (req, res) => {
+    try {
+      const { name, email, password, roleId, phone } = req.body;
+
+      if (!name || !email || !password || !roleId) {
+        return res.status(400).json({ message: "All fields are required." });
+      }
+
+      let user = await Authenticate.findOne({ email });
+      if (user) {
+        return res.status(400).json({ message: "Email already registered." });
+      }
+
+      const hashedPassword = await bcrypt.hash(password, 10);
+      user = new Authenticate({
+        name,
+        email,
+        password: hashedPassword,
+        roleId,
+        phone,
+      });
+
+      await user.save();
+      res.status(201).json({ message: "Admin created user successfully!" });
+    } catch (error) {
+      console.error("Admin Create User Error:", error);
+      res.status(500).json({ message: "Server error", error: error.message });
+    }
+  }
+);
 
 module.exports = router;

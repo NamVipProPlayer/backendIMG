@@ -143,5 +143,29 @@ router.post(
     }
   }
 );
+// Delete a user (Admin only)
+router.delete("/user/:id", authMiddleware, adminMiddleware, async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    // Check if user exists
+    const user = await Authenticate.findById(id);
+    if (!user) {
+      return res.status(404).json({ message: "User not found." });
+    }
+
+    // Prevent self-deletion (Admin cannot delete themselves)
+    if (req.user.id === id) {
+      return res.status(403).json({ message: "You cannot delete your own account." });
+    }
+
+    await Authenticate.findByIdAndDelete(id);
+    res.status(200).json({ message: "User deleted successfully." });
+  } catch (error) {
+    console.error("Delete User Error:", error);
+    res.status(500).json({ message: "Error deleting user", error: error.message });
+  }
+});
+
 
 module.exports = router;

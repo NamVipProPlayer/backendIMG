@@ -32,7 +32,7 @@ router.post("/register", async (req, res) => {
     user = new Authenticate({
       name,
       email,
-      password: hashedPassword,
+      password,
       roleId: 1, // Fixed to user role
       phone,
     });
@@ -130,7 +130,7 @@ router.post(
       user = new Authenticate({
         name,
         email,
-        password: hashedPassword,
+        password,
         roleId,
         phone,
       });

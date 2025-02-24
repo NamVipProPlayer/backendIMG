@@ -28,9 +28,6 @@ router.post("/register", async (req, res) => {
       return res.status(400).json({ message: "Email already registered." });
     }
 
-    // Hash password before saving
-    const hashedPassword = await bcrypt.hash(password, 10);
-
     // Default roleId = 1 (regular user)
     user = new Authenticate({
       name,
@@ -130,8 +127,6 @@ router.post(
       if (user) {
         return res.status(400).json({ message: "Email already registered." });
       }
-
-      const hashedPassword = await bcrypt.hash(password, 10);
       user = new Authenticate({
         name,
         email,

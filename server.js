@@ -9,6 +9,7 @@ const corsOptionsDelegate = function (req, callback) {
   const allowedOrigins = [
     "http://localhost:5173",
     "https://e-commerce-project-reactjs.vercel.app",
+    "http://localhost:5055",
   ];
   let corsOptions;
 
@@ -52,6 +53,22 @@ app.use("/api/product", productRoute);
 const shoesProduct = require("./routes/shoesRoute");
 app.use("/api/shoesRoute", shoesProduct);
 
+// Add cart routes
+const cartRoutes = require("./routes/cart");
+app.use("/api/cart", cartRoutes);
+
+//Import Wish List Router
+const wishListRoute = require("./routes/wishList");
+app.use("/api/wishlist", wishListRoute);
+
+//Import order routes
+const orderRoutes = require("./routes/orderRoutes");
+app.use("/api/order", orderRoutes);
+
+// Import chatbot routes
+const chatbotRoutes = require("./routes/chatbotRoute");
+app.use(chatbotRoutes);
+
 // Database connection
 async function connectDB() {
   try {
@@ -64,7 +81,7 @@ async function connectDB() {
 
 connectDB();
 
-// Start server
+// Start servers
 app.listen(process.env.PORT, () => {
   console.log("Server is running");
 });

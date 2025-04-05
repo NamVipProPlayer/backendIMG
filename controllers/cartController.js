@@ -33,7 +33,7 @@ const cartMiddleware = {
   // Add or update item in cart
   addToCart: async (req, res, next) => {
     try {
-      const { productId, size, quantity } = req.body; // Remove price from request body
+      const { productId, size, quantity } = req.body;
       const userId = req.user.id;
 
       // Validate request body
@@ -49,13 +49,25 @@ const cartMiddleware = {
         });
       }
 
-      // Fetch the product from the database to get the actual price
+      // Fetch the product from the database
       const product = await ShoesProduct.findById(productId);
       if (!product) {
         return res.status(404).json({ message: "Product not found" });
       }
 
-      const actualPrice = product.price; // Get correct price
+      // Store original price
+      const originalPrice = product.price;
+
+      // Determine the actual price based on sale status
+      let actualPrice = originalPrice;
+
+      // Check if the product has a sale
+      if (product.sale && product.sale > 0) {
+        // Calculate the discounted price
+        actualPrice = originalPrice * (1 - product.sale / 100);
+        // Round to 2 decimal places for currency
+        actualPrice = Math.round(actualPrice * 100) / 100;
+      }
 
       let cart = await Cart.findOne({ user: userId });
 
@@ -74,14 +86,18 @@ const cartMiddleware = {
 
       if (existingItemIndex > -1) {
         cart.items[existingItemIndex].quantity += quantity;
-        cart.items[existingItemIndex].price = actualPrice; // Always use correct price
+        cart.items[existingItemIndex].price = actualPrice; // Use sale price if applicable
+        cart.items[existingItemIndex].originalPrice = originalPrice; // Add original price
       } else {
-        cart.items.push({
+        const newItem = {
           product: productId,
           size,
           quantity,
-          price: actualPrice, // Store correct price
-        });
+          price: actualPrice, // Use sale price if applicable
+          originalPrice: originalPrice, // Add original price
+        };
+
+        cart.items.push(newItem);
       }
 
       // Recalculate total amount

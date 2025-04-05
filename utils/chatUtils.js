@@ -108,7 +108,9 @@ function detectPolicyQuestion(message) {
   return null;
 }
 
+
 module.exports = {
   isOffTopic,
-  detectPolicyQuestion
+  detectPolicyQuestion,
+
 };

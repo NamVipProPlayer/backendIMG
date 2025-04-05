@@ -43,24 +43,36 @@ function extractSizes(message) {
 function extractPriceRange(message) {
   const lowercaseMsg = message.toLowerCase();
 
-  // Pattern for "under X" or "less than X"
+  // Existing patterns
   const underPattern =
     /\b(?:under|less than|below|cheaper than|max|maximum)(?:\s+[\$€£])?\s*(\d+(?:\.\d+)?)\b/i;
-
-  // Pattern for "over X" or "more than X"
   const overPattern =
     /\b(?:over|more than|above|min|minimum|at least)(?:\s+[\$€£])?\s*(\d+(?:\.\d+)?)\b/i;
-
-  // Pattern for "between X and Y"
   const betweenPattern =
     /\b(?:between|from)(?:\s+[\$€£])?\s*(\d+(?:\.\d+)?)(?:\s+(?:and|to|-|–)|\s*-\s*)(?:[\$€£])?\s*(\d+(?:\.\d+)?)\b/i;
-
-  // Pattern for "X dollars/euros"
   const valuePattern =
     /\b(\d+(?:\.\d+)?)(?:\s+(?:dollars|euros|pounds|bucks|€|£|\$))\b/i;
-
-  // Pattern for "$X" or "€X"
   const currencyPattern = /\b[\$€£](\d+(?:\.\d+)?)\b/i;
+
+  // NEW PATTERNS
+  // Pattern for "in range X" or "around X"
+  const rangePattern =
+    /\b(?:in\s+range|around|about)(?:\s+[\$€£])?\s*(\d+(?:\.\d+)?)\b/i;
+
+  // Pattern for standalone numbers that could be prices (between 1 and any number of digits)
+  const standalonePrice = /\b(\d+(?:\.\d+)?)(?!\s*(?:\$|€|£|size|eu|us|uk))\b/i;
+
+  // First check for range pattern (new)
+  const rangeMatch = lowercaseMsg.match(rangePattern);
+  if (rangeMatch && rangeMatch[1]) {
+    const exactPrice = parseFloat(rangeMatch[1]);
+    if (!isNaN(exactPrice)) {
+      return {
+        min: Math.max(1, exactPrice * 0.8),
+        max: exactPrice * 1.2,
+      };
+    }
+  }
 
   // First check for between pattern
   const betweenMatch = lowercaseMsg.match(betweenPattern);
@@ -107,6 +119,17 @@ function extractPriceRange(message) {
     // If exact price mentioned, set a range around it (±20%)
     const exactPrice = parseFloat(currencyMatch[1]);
     if (!isNaN(exactPrice)) {
+      min = exactPrice * 0.8;
+      max = exactPrice * 1.2;
+    }
+  }
+
+  // NEW: Check for standalone price
+  const standaloneMatch = lowercaseMsg.match(standalonePrice);
+  if (standaloneMatch && standaloneMatch[1]) {
+    const exactPrice = parseFloat(standaloneMatch[1]);
+    if (!isNaN(exactPrice) && exactPrice >= 10) {
+      // Likely a price if >= 10
       min = exactPrice * 0.8;
       max = exactPrice * 1.2;
     }
@@ -247,6 +270,7 @@ function findMentionedShoes(message, inventory, colorFilters = []) {
     lowercaseMsg,
     inventory
   );
+
   if (brandCategoryMatches.length > 0) {
     for (const shoe of brandCategoryMatches) {
       if (!seenIds.has(shoe._id.toString())) {
@@ -259,6 +283,40 @@ function findMentionedShoes(message, inventory, colorFilters = []) {
     // If we found shoes by brand+category, return them directly
     if (mentionedShoes.length > 0) {
       return applyColorFilters(mentionedShoes, colorFilters);
+    }
+  }
+
+  // Add this new section to handle gender-only searches
+  const genderOnlyMatches = findGenderOnlyMatches(lowercaseMsg, inventory);
+  if (genderOnlyMatches.length > 0) {
+    for (const shoe of genderOnlyMatches) {
+      if (!seenIds.has(shoe._id.toString())) {
+        mentionedShoes.push(shoe);
+        seenIds.add(shoe._id.toString());
+        logger.debug(`Gender-only match found: "${shoe.name}"`);
+      }
+    }
+
+    // If we found shoes by gender, return them directly (with color filtering)
+    if (mentionedShoes.length > 0) {
+      return applyColorFilters(mentionedShoes, colorFilters).slice(0, 5); // Return up to 5 matches
+    }
+  }
+
+  // Check if this is a best seller query
+  const bestSellerMatches = findBestSellerMatches(lowercaseMsg, inventory);
+  if (bestSellerMatches.length > 0) {
+    logger.debug(`Found ${bestSellerMatches.length} best seller shoes`);
+    for (const shoe of bestSellerMatches) {
+      if (!seenIds.has(shoe._id.toString())) {
+        mentionedShoes.push(shoe);
+        seenIds.add(shoe._id.toString());
+      }
+    }
+
+    // If we found best seller shoes, return them directly (with color filtering)
+    if (mentionedShoes.length > 0) {
+      return applyColorFilters(mentionedShoes, colorFilters).slice(0, 5); // Return up to 5 best sellers
     }
   }
 
@@ -497,10 +555,26 @@ function findBrandCategoryMatches(message, inventory) {
         : "";
 
       // Check if any gender word is in shoe name or category
-      const matchesGender = genderMentions.some(
-        (gender) =>
-          shoeNameLower.includes(gender) || shoeCategoryLower.includes(gender)
-      );
+      const matchesGender = genderMentions.some((gender) => {
+        // Direct inclusion check
+        if (
+          shoeNameLower.includes(gender) ||
+          shoeCategoryLower.includes(gender)
+        ) {
+          return true;
+        }
+
+        // Check for pattern variations in category (e.g., "Women's shoes", "Man's Shoes")
+        const genderVariations = [
+          gender + "'s shoes",
+          gender + "s shoes",
+          gender + " shoes",
+        ];
+
+        return genderVariations.some((variation) =>
+          shoeCategoryLower.includes(variation)
+        );
+      });
 
       if (!matchesGender) return false;
     }
@@ -519,6 +593,99 @@ function findBrandCategoryMatches(message, inventory) {
 
     return true;
   });
+}
+
+/**
+ * Find shoes matching gender criteria only
+ * @param {string} message - Lowercase user message
+ * @param {Array} inventory - Array of shoe objects
+ * @returns {Array} Matching shoes
+ */
+function findGenderOnlyMatches(message, inventory) {
+  const genderMentions = extractGender(message);
+
+  if (!genderMentions.length) return [];
+
+  logger.debug(`Gender-only search with: ${genderMentions.join(", ")}`);
+
+  // Normalize gender terms - convert singular to plural forms
+  const normalizedGenders = genderMentions.map((gender) => {
+    if (gender === "man" || gender === "man's" || gender === "mans") {
+      return "man";
+    }
+    if (gender === "woman" || gender === "woman's" || gender === "womans") {
+      return "women";
+    }
+    return gender;
+  });
+
+  return inventory.filter((shoe) => {
+    const shoeNameLower = shoe.name ? shoe.name.toLowerCase() : "";
+    const shoeCategoryLower = shoe.category ? shoe.category.toLowerCase() : "";
+
+    // Check if any gender word is in shoe name or category
+    return normalizedGenders.some((gender) => {
+      // Direct inclusion check
+      if (
+        shoeNameLower.includes(gender) ||
+        shoeCategoryLower.includes(gender)
+      ) {
+        return true;
+      }
+
+      // Check for pattern variations in category (e.g., "Women's shoes", "Men's Shoes")
+      const genderVariations = [
+        gender + "'s shoes",
+        gender + "s shoes",
+        gender + " shoes",
+      ];
+
+      return genderVariations.some((variation) =>
+        shoeCategoryLower.includes(variation)
+      );
+    });
+  });
+}
+
+/**
+ * Find shoes marked as best sellers
+ * @param {string} message - Lowercase user message
+ * @param {Array} inventory - Array of shoe objects
+ * @returns {Array} Matching best seller shoes
+ */
+function findBestSellerMatches(message, inventory) {
+  // Check if message contains "best seller" related terms
+  const bestSellerTerms = [
+    "best seller",
+    "bestseller",
+    "best selling",
+    "bestselling",
+    "most popular",
+    "top selling",
+    "popular",
+    "trending",
+    "top rated",
+    "most bought",
+    "best shoes",
+  ];
+
+  const hasBestSellerMention = bestSellerTerms.some((term) =>
+    message.includes(term)
+  );
+
+  if (!hasBestSellerMention) return [];
+
+  logger.debug("Looking for best seller shoes");
+
+  // Filter inventory to match the bestSeller field exactly as defined in your schema
+  const bestSellerShoes = inventory.filter(
+    (shoe) => shoe.bestSeller === true || shoe.bestSeller === "true"
+  );
+
+  // Log how many matches we found for debugging
+  logger.debug(`Found ${bestSellerShoes.length} shoes with bestSeller=true`);
+
+  return bestSellerShoes;
 }
 
 /**
@@ -565,11 +732,15 @@ function extractGender(message) {
     "girls",
   ];
 
+  // Match both standalone gender words and gender words followed by "shoes"
   return genderKeywords.filter(
     (keyword) =>
       message.includes(keyword) ||
       message.includes(keyword + "'s") ||
-      message.includes(keyword + "s")
+      message.includes(keyword + "s") ||
+      message.includes(keyword + "'s shoes") ||
+      message.includes(keyword + "s shoes") ||
+      message.includes(keyword + " shoes")
   );
 }
 
@@ -937,5 +1108,7 @@ module.exports = {
   detectActionRequest,
   findBestMatchingShoe,
   extractSizes,
-  extractPriceRange, // Add this to exports
+  extractPriceRange,
+  findGenderOnlyMatches,
+  findBestSellerMatches,
 };

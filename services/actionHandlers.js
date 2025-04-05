@@ -40,7 +40,7 @@ async function handleActionRequest(request, userId, colorFilters = []) {
     );
 
     // Check if shoe is in stock before proceeding
-    if (action === "add" && type === "cart" && targetShoe.inStock === false) {
+    if (action === "add" && type === "cart" && targetShoe.stock <= 0) {
       return {
         response: `I'm sorry, the ${targetShoe.name} is currently out of stock. Would you like to add it to your wishlist instead?`,
       };
@@ -147,12 +147,18 @@ async function handleCartAction(userId, action, targetShoe, size = null) {
       cart.items[existingItemIndex].quantity += 1;
       logger.debug(`Updated quantity for ${targetShoe.name} in cart`);
     } else {
-      // Add new item
+      // Calculate the original price from sale percentage
+      const originalPrice = targetShoe.sale > 0 
+        ? Math.round((targetShoe.price / (1 - targetShoe.sale/100)) * 100) / 100
+        : targetShoe.price;
+
+      // Add new item with originalPrice
       cart.items.push({
         product: targetShoe._id,
         size: selectedSize,
         quantity: 1,
         price: targetShoe.price,
+        originalPrice: originalPrice,
       });
       logger.debug(`Added new item ${targetShoe.name} to cart`);
     }

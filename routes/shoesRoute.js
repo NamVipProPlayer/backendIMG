@@ -16,7 +16,7 @@ router.get("/:shoeId", getShoeById);
 router.post("/", createShoe);
 router.put("/:shoeId", updateShoe);
 router.delete("/:shoeId", deleteShoe);
-router.get("/search/shoes", searchShoes);
-router.get("/search/suggestions", getSuggestions);
+// router.get("/search/shoes", searchShoes);
+// router.get("/search/suggestions", getSuggestions);
 
 module.exports = router;
